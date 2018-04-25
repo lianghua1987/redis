@@ -406,7 +406,7 @@ Reading messages... (press Ctrl-C to quit)
 
 ### Persistence
 
-##### RDS
+##### RDS - SNAPSHOT
 
 The RDB persistence performs point-in-time snapshots of your dataset at specified intervals.
 
@@ -435,6 +435,36 @@ Cons:
 
 Data loss between data save point.
 
-##### AOF
+##### AOF - Log
 
 AOF persistence logs every write operation received by the server, that will be played again at server startup, reconstructing the original dataset. Commands are logged using the same format as the Redis protocol itself, in an append-only fashion. Redis is able to rewrite the log on background when it gets too big.
+
+```
+appendonly no #是否打开aof日志功能
+appendfsync always #每个命令都立即同步到aof，安全，速度慢
+appendfsync everysec #折衷方案，每一秒写入一次，由操作系统判断缓冲区大小，同步频率低，速度快
+
+no-appendfsync-on-rewrite yes #正在导出rdb快照时候是否要停止同步aof
+auto-aof-rewrite-percentage 100 #aof文件大小比起上次重写时，增长100%
+auto-aof-rewrite-min-size 64mb #aof文件至少超过64mb时候重写
+```
+
+Q: 在dump rdb过程中，aof如果停止同步，数据会不会丢失？
+
+A：不会，所有操作缓存在内存的队列里，dump完成后统一操作。
+
+Q：aof重写是什么？
+
+A：aof重写是指把内存中的数据逆化成命令，写入aof日志里，解决aof日志过大问题。
+
+Q：如果rdb和aof同时存在，优先用谁来恢复数据？
+
+A：aof,在数据恢复时，如果存在.rdb（有内容），.aof（无内容），由于采用aof优先恢复，导致redis内存清空。
+
+Q：rdb和aof是否可以同时使用？
+
+A：可以，并且推荐。
+
+Q：恢复时rdb和aof那个速度快？
+
+A： rdb，应为其是数据的内存映射，直接载入内存，尔aof是命令，需要逐条执行。
