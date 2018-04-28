@@ -1,16 +1,12 @@
 daemonize no
-
-#slave would do rdb dump
-#save 900 1
-#save 300 10
-#save 60 1000
-
+save 900 1
+save 300 10
+save 60 1000
 rdbcompression yes                
 rdbchecksum yes                 
 dbfilename dump.rdb         
-dir /Users/hliang/code/redis/redis-data/
+dir /Users/hliang/code/redis-data/
 stop-writes-on-bgsave-error yes
-
 appendonly yes
 appendfilename appendonly.aof
 appendfsync everysec
@@ -18,5 +14,3 @@ no-appendfsync-on-rewrite yes
 auto-aof-rewrite-percentage 100
 auto-aof-rewrite-min-size 64mb
 
-
-slave-priority 100

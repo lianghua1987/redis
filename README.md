@@ -468,3 +468,139 @@ A：可以，并且推荐。
 Q：恢复时rdb和aof那个速度快？
 
 A： rdb，应为其是数据的内存映射，直接载入内存，尔aof是命令，需要逐条执行。
+
+### Cluster
+
+```
+Huas-MacBook-Pro-2:3.2.11 hliang$  cp redis.config redis.config.orig
+Huas-MacBook-Pro-2:3.2.11 hliang$  cp redis.config redis6380.config
+Huas-MacBook-Pro-2:3.2.11 hliang$  cp redis.config redis6381.config
+```
+
+##### Must have on slave config
+
+```
+slaveof localhost 6379
+slave-read-only yes
+```
+
+##### Nice to have on slave config
+
+```shell
+slave-serve-stale-data yes
+repl-disable-tcp-nodelay no
+slave-priority 100
+stop-writes-on-bgsave-error yes
+```
+
+##### Infurstrature
+
+|                         | Rdb  | Aof  |
+| ----------------------- | :--: | :--: |
+| **Master (port: 6379)** |  no  | yes  |
+| **Slave1 (port:6380)**  | yes  |  no  |
+| **Slave2 (port: 6381)** |  no  |  no  |
+
+##### Open three different terminals
+
+```
+Huas-MacBook-Pro-2:bin hliang$ ./redis-server ../redis.config
+Huas-MacBook-Pro-2:bin hliang$  ./redis-server ../redis6380.config
+Huas-MacBook-Pro-2:bin hliang$  ./redis-server ../redis6381.config
+```
+
+##### output
+
+```
+6861:M 28 Apr 11:02:38.271 * Increased maximum number of open files to 10032 (it was originally set to 256).
+                _._                                                  
+           _.-``__ ''-._                                             
+      _.-``    `.  `_.  ''-._           Redis 3.2.11 (00000000/0) 64 bit
+  .-`` .-```.  ```\/    _.,_ ''-._                                   
+ (    '      ,       .-`  | `,    )     Running in standalone mode
+ |`-._`-...-` __...-.``-._|'` _.-'|     Port: 6379
+ |    `-._   `._    /     _.-'    |     PID: 6861
+  `-._    `-._  `-./  _.-'    _.-'                                   
+ |`-._`-._    `-.__.-'    _.-'_.-'|                                  
+ |    `-._`-._        _.-'_.-'    |           http://redis.io        
+  `-._    `-._`-.__.-'_.-'    _.-'                                   
+ |`-._`-._    `-.__.-'    _.-'_.-'|                                  
+ |    `-._`-._        _.-'_.-'    |                                  
+  `-._    `-._`-.__.-'_.-'    _.-'                                   
+      `-._    `-.__.-'    _.-'                                       
+          `-._        _.-'                                           
+              `-.__.-'                                               
+
+6861:M 28 Apr 11:02:38.279 # Server started, Redis version 3.2.11
+6861:M 28 Apr 11:02:38.280 * The server is now ready to accept connections on port 6379
+6861:M 28 Apr 11:04:43.577 * Slave [::1]:6380 asks for synchronization
+6861:M 28 Apr 11:04:43.577 * Full resync requested by slave [::1]:6380
+6861:M 28 Apr 11:04:43.577 * Starting BGSAVE for SYNC with target: disk
+6861:M 28 Apr 11:04:43.577 * Background saving started by pid 6869
+6869:C 28 Apr 11:04:43.585 * DB saved on disk
+6861:M 28 Apr 11:04:43.642 * Background saving terminated with success
+6861:M 28 Apr 11:04:43.642 * Synchronization with slave [::1]:6380 succeeded
+6861:M 28 Apr 11:05:48.612 * Slave [::1]:6381 asks for synchronization
+6861:M 28 Apr 11:05:48.612 * Full resync requested by slave [::1]:6381
+6861:M 28 Apr 11:05:48.612 * Starting BGSAVE for SYNC with target: disk
+6861:M 28 Apr 11:05:48.612 * Background saving started by pid 6874
+6874:C 28 Apr 11:05:48.615 * DB saved on disk
+6861:M 28 Apr 11:05:48.693 * Background saving terminated with success
+6861:M 28 Apr 11:05:48.693 * Synchronization with slave [::1]:6381 succeeded
+```
+
+##### test master
+
+```
+Huas-MacBook-Pro-2:bin hliang$ ./redis-cli 
+127.0.0.1:6379> set name hualiang
+OK
+```
+
+##### test slave1
+
+```
+Huas-MacBook-Pro-2:bin hliang$ ./redis-cli -p 6380
+127.0.0.1:6380> get name
+"hualiang"
+127.0.0.1:6380> keys *
+1) "name"
+127.0.0.1:6380> set age 30
+(error) READONLY You can't write against a read only slave.
+```
+
+##### test slave 2
+
+```
+Huas-MacBook-Pro-2:bin hliang$ ./redis-cli -p 6381
+127.0.0.1:6381> get name
+"hualiang"
+127.0.0.1:6381> keys *
+1) "name"
+127.0.0.1:6380> set age 30
+(error) READONLY You can't write against a read only slave.
+```
+
+##### password
+
+```Shell
+requirepass passwd # master	node
+
+masterauth passwd # slave node
+```
+
+```
+Huas-MacBook-Pro-2:bin hliang$ ./redis-server ../redis-auth.config 
+
+Huas-MacBook-Pro-2:bin hliang$ ./redis-cli 
+127.0.0.1:6379> keys *
+(error) NOAUTH Authentication required.
+127.0.0.1:6379> auth passwd
+OK
+127.0.0.1:6379> keys *
+1) "name"
+```
+
+##### 缺陷:
+
+每次salave断开后,(无论是主动断开,还是网络故障), 再连接master, 都要master全部dump出来rdb,再aof,即同步的过程都要重新执行1遍. 所以要记住---多台slave不要一下都启动起来,否则master可能IO剧增
